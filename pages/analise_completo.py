@@ -66,6 +66,7 @@ COLMAP = {
         "Application"
     ],
     "Tipo": ["Tipo", "Issue Type", "Tipo de solicitação", "Tipo de solicitacao", "Type"],
+    "Chave": ["Chave", "Key", "Chave do projeto"]
 }
 
 # Status considerados encerrado (inclui PT e EN)
@@ -202,7 +203,14 @@ def validar_minimo(df: pd.DataFrame, necessarias: List[str]) -> Tuple[bool, List
 # Classificação de tipo (Request/Incident/Outro)
 # =========================================
 def normalizar_tipo_linha(row) -> str:
-    """Determina se é Request/Incident/Outro olhando 'Tipo' e 'Projeto'."""
+    # Prioridade 1: Chave
+    if "Chave" in row and pd.notna(row["Chave"]):
+        chave3 = str(row["Chave"]).upper()[:3]
+        if chave3 == "REQ":
+            return "Request"
+        if chave3 == "INC":
+            return "Incident"
+    # Prioridade 2: Tipo e Projeto
     texto = ""
     if "Tipo" in row and pd.notna(row["Tipo"]):
         texto += f" {str(row['Tipo'])}"
@@ -351,14 +359,16 @@ if not uploaded:
 df_raw = ler_csv_flex(uploaded)
 df = padronizar_colunas(df_raw)
 
-# =========================================
-# Validação mínima
-# =========================================
 ok, faltando = validar_minimo(df, ["Responsavel", "Status", "Criado"])
 if not ok:
-    st.error(f"Colunas obrigatórias ausentes: {', '.join(faltando)}. "
-             f"Verifique os nomes ou ajuste o mapeamento em COLMAP.")
+    st.error(f"Colunas obrigatórias ausentes: {', '.join(faltando)}. Verifique COLMAP.")
     st.stop()
+
+df["Criado"] = parse_mixed_datetime_series(df["Criado"])
+if "Resolvido" in df.columns:
+    df["Resolvido"] = parse_mixed_datetime_series(df["Resolvido"])
+
+df["Tipo_Normalizado"] = df.apply(normalizar_tipo_linha, axis=1)
 
 # =========================================
 # Tratamento de datas (PT/EN)
